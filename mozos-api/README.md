@@ -91,7 +91,7 @@ curl -X POST http://localhost:3001/api/bares/register \
     "apellido": "López",
     "email": "martin@mibar.com",
     "password": "mibar1234",
-    "bar_nombre": "Bar El Farol",
+    "bar_nombre": "Dos Banderas",
     "bar_descripcion": "Bar de barrio con onda",
     "bar_color": "#1a1a2e"
   }'
@@ -104,8 +104,8 @@ Respuesta:
   "usuario": { "id": 1, "nombre": "Martín López", "rol": "admin" },
   "bar": {
     "id": 1,
-    "nombre": "Bar El Farol",
-    "slug": "bar-el-farol",
+    "nombre": "Dos Banderas",
+    "slug": "Dos-Banderas",
     "url_publica": "mozos.app/bar-el-farol"
   }
 }

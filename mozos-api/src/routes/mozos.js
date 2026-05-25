@@ -17,125 +17,123 @@ function validar(req, res) {
   return true;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// GET /api/mozos/:id  — Perfil público de un mozo
-// ─────────────────────────────────────────────────────────────────────────────
-router.get('/:id', authOpcional, (req, res) => {
-  const mozo = db.prepare(`
-    SELECT m.id, m.nombre, m.foto, m.descripcion, m.turno, m.bar_id,
-           b.nombre AS bar_nombre
-    FROM mozos m
-    JOIN bares b ON b.id = m.bar_id
-    WHERE m.id = ? AND m.activo = 1
-  `).get(req.params.id);
+// GET /api/mozos/:id
+router.get('/:id', authOpcional, async (req, res) => {
+  try {
+    const mozo = await db.prepare(`
+      SELECT m.id, m.nombre, m.foto, m.descripcion, m.turno, m.bar_id,
+             b.nombre AS bar_nombre
+      FROM mozos m
+      JOIN bares b ON b.id = m.bar_id
+      WHERE m.id = ? AND m.activo = 1
+    `).get(req.params.id);
 
-  if (!mozo) return res.status(404).json({ error: 'Mozo no encontrado' });
+    if (!mozo) return res.status(404).json({ error: 'Mozo no encontrado' });
 
-  // Métricas promedio
-  const metricas = db.prepare(`
-    SELECT
-      ROUND(AVG(atencion),   1) AS atencion,
-      ROUND(AVG(amabilidad), 1) AS amabilidad,
-      ROUND(AVG(rapidez),    1) AS rapidez,
-      ROUND(AVG(actitud),    1) AS actitud,
-      ROUND(AVG((atencion + amabilidad + rapidez + actitud) / 4.0), 1) AS promedio,
-      COUNT(*) AS total_resenas
-    FROM resenas WHERE mozo_id = ?
-  `).get(mozo.id);
+    const metricas = await db.prepare(`
+      SELECT
+        ROUND(AVG(atencion),   1) AS atencion,
+        ROUND(AVG(amabilidad), 1) AS amabilidad,
+        ROUND(AVG(rapidez),    1) AS rapidez,
+        ROUND(AVG(actitud),    1) AS actitud,
+        ROUND(AVG((atencion + amabilidad + rapidez + actitud) / 4.0), 1) AS promedio,
+        COUNT(*) AS total_resenas
+      FROM resenas WHERE mozo_id = ?
+    `).get(mozo.id);
 
-  // Últimos 5 comentarios
-  const comentarios = db.prepare(`
-    SELECT r.comentario, r.fecha,
-           u.nombre AS autor
-    FROM resenas r
-    JOIN usuarios u ON u.id = r.usuario_id
-    WHERE r.mozo_id = ? AND r.comentario IS NOT NULL AND r.comentario != ''
-    ORDER BY r.fecha DESC
-    LIMIT 5
-  `).all(mozo.id);
+    const comentarios = await db.prepare(`
+      SELECT r.comentario, r.fecha, u.nombre AS autor
+      FROM resenas r
+      JOIN usuarios u ON u.id = r.usuario_id
+      WHERE r.mozo_id = ? AND r.comentario IS NOT NULL AND r.comentario != ''
+      ORDER BY r.fecha DESC
+      LIMIT 5
+    `).all(mozo.id);
 
-  // Badges del mes actual
-  const mes = new Date().toISOString().slice(0, 7);
-  const badges = db.prepare(`
-    SELECT ba.nombre, ba.icono
-    FROM mozo_badges mb
-    JOIN badges ba ON ba.id = mb.badge_id
-    WHERE mb.mozo_id = ? AND mb.mes = ?
-  `).all(mozo.id, mes);
+    const mes = new Date().toISOString().slice(0, 7);
+    const badges = await db.prepare(`
+      SELECT ba.nombre, ba.icono
+      FROM mozo_badges mb
+      JOIN badges ba ON ba.id = mb.badge_id
+      WHERE mb.mozo_id = ? AND mb.mes = ?
+    `).all(mozo.id, mes);
 
-  return res.json({ mozo, metricas, comentarios, badges });
+    return res.json({ mozo, metricas, comentarios, badges });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Error interno del servidor' });
+  }
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
-// POST /api/mozos  — Agregar mozo (solo admin del bar)
-// ─────────────────────────────────────────────────────────────────────────────
-router.post(
-  '/',
-  authAdmin,
-  [
-    body('nombre').trim().isLength({ min: 2 }).withMessage('Nombre demasiado corto'),
-    body('turno').optional().isIn(['Mañana', 'Tarde', 'Noche']).withMessage('Turno inválido'),
-  ],
-  (req, res) => {
-    if (!validar(req, res)) return;
-
-    const { nombre, descripcion, turno } = req.body;
-    const bar_id = req.usuario.bar_id;
-
-    // Verificar que el bar le pertenece
-    const bar = db.prepare('SELECT id FROM bares WHERE id = ? AND admin_id = ?').get(bar_id, req.usuario.id);
+// POST /api/mozos
+router.post('/', authAdmin, [
+  body('nombre').trim().isLength({ min: 2 }).withMessage('Nombre demasiado corto'),
+  body('turno').optional().isIn(['Mañana', 'Tarde', 'Noche']).withMessage('Turno inválido'),
+], async (req, res) => {
+  if (!validar(req, res)) return;
+  const { nombre, descripcion, turno } = req.body;
+  const bar_id = req.usuario.bar_id;
+  try {
+    const bar = await db.prepare('SELECT id FROM bares WHERE id = ? AND admin_id = ?').get(bar_id, req.usuario.id);
     if (!bar) return res.status(403).json({ error: 'No tenés permiso sobre este bar' });
 
-    const resultado = db.prepare(`
-      INSERT INTO mozos (bar_id, nombre, descripcion, turno)
-      VALUES (?, ?, ?, ?)
+    const resultado = await db.prepare(`
+      INSERT INTO mozos (bar_id, nombre, descripcion, turno) VALUES (?, ?, ?, ?)
     `).run(bar_id, nombre, descripcion || null, turno || null);
 
-    const mozo = db.prepare('SELECT * FROM mozos WHERE id = ?').get(resultado.lastInsertRowid);
+    const mozo = await db.prepare('SELECT * FROM mozos WHERE id = ?').get(resultado.lastInsertRowid);
     return res.status(201).json({ mozo });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Error interno del servidor' });
   }
-);
-
-// ─────────────────────────────────────────────────────────────────────────────
-// PUT /api/mozos/:id  — Editar mozo
-// ─────────────────────────────────────────────────────────────────────────────
-router.put('/:id', authAdmin, (req, res) => {
-  const mozo = db.prepare(`
-    SELECT m.* FROM mozos m
-    JOIN bares b ON b.id = m.bar_id
-    WHERE m.id = ? AND m.activo = 1 AND b.admin_id = ?
-  `).get(req.params.id, req.usuario.id);
-
-  if (!mozo) return res.status(404).json({ error: 'Mozo no encontrado o sin permiso' });
-
-  const { nombre, descripcion, turno } = req.body;
-
-  db.prepare(`
-    UPDATE mozos SET
-      nombre      = COALESCE(?, nombre),
-      descripcion = COALESCE(?, descripcion),
-      turno       = COALESCE(?, turno)
-    WHERE id = ?
-  `).run(nombre || null, descripcion || null, turno || null, mozo.id);
-
-  const actualizado = db.prepare('SELECT * FROM mozos WHERE id = ?').get(mozo.id);
-  return res.json({ mozo: actualizado });
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
-// DELETE /api/mozos/:id  — Desactivar mozo (soft delete)
-// ─────────────────────────────────────────────────────────────────────────────
-router.delete('/:id', authAdmin, (req, res) => {
-  const mozo = db.prepare(`
-    SELECT m.* FROM mozos m
-    JOIN bares b ON b.id = m.bar_id
-    WHERE m.id = ? AND m.activo = 1 AND b.admin_id = ?
-  `).get(req.params.id, req.usuario.id);
+// PUT /api/mozos/:id
+router.put('/:id', authAdmin, async (req, res) => {
+  try {
+    const mozo = await db.prepare(`
+      SELECT m.* FROM mozos m
+      JOIN bares b ON b.id = m.bar_id
+      WHERE m.id = ? AND m.activo = 1 AND b.admin_id = ?
+    `).get(req.params.id, req.usuario.id);
 
-  if (!mozo) return res.status(404).json({ error: 'Mozo no encontrado o sin permiso' });
+    if (!mozo) return res.status(404).json({ error: 'Mozo no encontrado o sin permiso' });
 
-  db.prepare('UPDATE mozos SET activo = 0 WHERE id = ?').run(mozo.id);
-  return res.json({ ok: true });
+    const { nombre, descripcion, turno } = req.body;
+    await db.prepare(`
+      UPDATE mozos SET
+        nombre      = COALESCE(?, nombre),
+        descripcion = COALESCE(?, descripcion),
+        turno       = COALESCE(?, turno)
+      WHERE id = ?
+    `).run(nombre || null, descripcion || null, turno || null, mozo.id);
+
+    const actualizado = await db.prepare('SELECT * FROM mozos WHERE id = ?').get(mozo.id);
+    return res.json({ mozo: actualizado });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Error interno del servidor' });
+  }
+});
+
+// DELETE /api/mozos/:id
+router.delete('/:id', authAdmin, async (req, res) => {
+  try {
+    const mozo = await db.prepare(`
+      SELECT m.* FROM mozos m
+      JOIN bares b ON b.id = m.bar_id
+      WHERE m.id = ? AND m.activo = 1 AND b.admin_id = ?
+    `).get(req.params.id, req.usuario.id);
+
+    if (!mozo) return res.status(404).json({ error: 'Mozo no encontrado o sin permiso' });
+
+    await db.prepare('UPDATE mozos SET activo = 0 WHERE id = ?').run(mozo.id);
+    return res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Error interno del servidor' });
+  }
 });
 
 module.exports = router;

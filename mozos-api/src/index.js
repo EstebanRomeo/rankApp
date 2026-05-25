@@ -7,6 +7,7 @@ const baresRoutes   = require('./routes/bares');
 const mozosRoutes   = require('./routes/mozos');
 const resenasRoutes = require('./routes/resenas');
 const alertasRoutes = require('./routes/alertas');
+const metricsRoutes = require('./routes/metrics');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -23,6 +24,7 @@ app.use('/api/bares',   baresRoutes);
 app.use('/api/mozos',   mozosRoutes);
 app.use('/api/resenas', resenasRoutes);
 app.use('/api/alertas', alertasRoutes);
+app.use('/api/metrics', metricsRoutes);
 
 app.get('/api/health', (req, res) => res.json({ ok: true }));
 
