@@ -71,22 +71,34 @@ router.post('/', authAdmin, [
   body('turno').optional().isIn(['Mañana', 'Tarde', 'Noche']).withMessage('Turno inválido'),
 ], async (req, res) => {
   if (!validar(req, res)) return;
-  const { nombre, descripcion, turno } = req.body;
+  console.log(req.body);
+  const { nombre, descripcion, turno, foto } = req.body;
   const bar_id = req.usuario.bar_id;
   try {
     const bar = await db.prepare('SELECT id FROM bares WHERE id = ? AND admin_id = ?').get(bar_id, req.usuario.id);
     if (!bar) return res.status(403).json({ error: 'No tenés permiso sobre este bar' });
 
     const resultado = await db.prepare(`
-      INSERT INTO mozos (bar_id, nombre, descripcion, turno) VALUES (?, ?, ?, ?)
-    `).run(bar_id, nombre, descripcion || null, turno || null);
+  INSERT INTO mozos (bar_id, nombre, foto, descripcion, turno)
+  VALUES (?, ?, ?, ?, ?)
+`).run(
+  bar_id,
+  nombre,
+  foto || null,
+  descripcion || null,
+  turno || null
+);
 
     const mozo = await db.prepare('SELECT * FROM mozos WHERE id = ?').get(resultado.lastInsertRowid);
     return res.status(201).json({ mozo });
   } catch (err) {
-    console.error(err);
-    return res.status(500).json({ error: 'Error interno del servidor' });
-  }
+  console.error('ERROR CREANDO MOZO:', err);
+
+  return res.status(500).json({
+    error: err.message,
+    stack: err.stack
+  });
+}
 });
 
 // PUT /api/mozos/:id
@@ -100,14 +112,21 @@ router.put('/:id', authAdmin, async (req, res) => {
 
     if (!mozo) return res.status(404).json({ error: 'Mozo no encontrado o sin permiso' });
 
-    const { nombre, descripcion, turno } = req.body;
+    const { nombre, descripcion, turno, foto } = req.body;
     await db.prepare(`
-      UPDATE mozos SET
-        nombre      = COALESCE(?, nombre),
-        descripcion = COALESCE(?, descripcion),
-        turno       = COALESCE(?, turno)
-      WHERE id = ?
-    `).run(nombre || null, descripcion || null, turno || null, mozo.id);
+  UPDATE mozos SET
+    nombre      = COALESCE(?, nombre),
+    foto        = COALESCE(?, foto),
+    descripcion = COALESCE(?, descripcion),
+    turno       = COALESCE(?, turno)
+  WHERE id = ?
+`).run(
+  nombre || null,
+  foto !== undefined ? foto : null,
+  descripcion || null,
+  turno || null,
+  mozo.id
+);
 
     const actualizado = await db.prepare('SELECT * FROM mozos WHERE id = ?').get(mozo.id);
     return res.json({ mozo: actualizado });

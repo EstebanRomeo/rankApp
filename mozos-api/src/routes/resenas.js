@@ -143,6 +143,30 @@ router.get('/mozo/:mozo_id', async (req, res) => {
   }
 });
 
+// GET /api/resenas/bar/:bar_id/recientes  — PÚBLICO, solo comentarios con texto
+router.get('/bar/:bar_id/recientes', async (req, res) => {
+  const limite = Math.min(10, parseInt(req.query.limite) || 4);
+  try {
+    const resenas = await db.prepare(`
+      SELECT r.comentario, r.fecha,
+             u.nombre AS autor, m.nombre AS mozo_nombre, m.foto AS mozo_foto,
+             ROUND((r.atencion + r.amabilidad + r.rapidez + r.actitud) / 4.0, 1) AS promedio
+      FROM resenas r
+      JOIN usuarios u ON u.id = r.usuario_id
+      JOIN mozos    m ON m.id = r.mozo_id
+      WHERE m.bar_id = ?
+        AND r.comentario IS NOT NULL
+        AND r.comentario != ''
+      ORDER BY r.fecha DESC
+      LIMIT ?
+    `).all(req.params.bar_id, limite);
+    return res.json({ resenas });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Error interno del servidor' });
+  }
+});
+
 // GET /api/resenas/bar/:bar_id
 router.get('/bar/:bar_id', authAdmin, async (req, res) => {
   if (req.usuario.bar_id !== parseInt(req.params.bar_id)) {
