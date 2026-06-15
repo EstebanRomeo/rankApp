@@ -97,6 +97,17 @@ class DB {
       `CREATE INDEX IF NOT EXISTS idx_resenas_usuario ON resenas(usuario_id)`,
       `CREATE INDEX IF NOT EXISTS idx_resenas_fecha   ON resenas(fecha)`,
       `CREATE INDEX IF NOT EXISTS idx_mozos_bar       ON mozos(bar_id)`,
+      `CREATE TABLE IF NOT EXISTS codigos_invitacion (
+        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+        codigo     TEXT    NOT NULL UNIQUE,
+        usado      INTEGER NOT NULL DEFAULT 0,
+        usado_por  INTEGER REFERENCES usuarios(id),
+        usado_en   TEXT,
+        creado_en  TEXT    NOT NULL DEFAULT (datetime('now')),
+        expira_en  TEXT,
+        notas      TEXT
+      )`,
+      `CREATE INDEX IF NOT EXISTS idx_codigos ON codigos_invitacion(codigo)`,
     ];
 
     for (const sql of statements) {

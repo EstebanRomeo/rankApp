@@ -34,7 +34,7 @@ router.post(
   async (req, res) => {
     if (!validar(req, res)) return;
 
-    const { nombre, apellido, email, password, bar_nombre, bar_descripcion, bar_color, bar_logo } = req.body;
+    const { nombre, apellido, email, password, bar_nombre, bar_descripcion, bar_color } = req.body;
 
     try {
       const existe = await db.prepare('SELECT id FROM usuarios WHERE email = ?').get(email);
@@ -61,14 +61,21 @@ router.post(
           .replace(/[^a-z0-9-]/g, '');
 
         const resBar = await db.prepare(`
-          INSERT INTO bares (nombre, descripcion, logo, color, slug, admin_id)
-          VALUES (?, ?, ?, ?, ?, ?)
-        `).run(bar_nombre, bar_descripcion || null, bar_logo || null, bar_color || '#1a1a2e', slug, admin_id);
+          INSERT INTO bares (nombre, descripcion, color, slug, admin_id)
+          VALUES (?, ?, ?, ?, ?)
+        `).run(bar_nombre, bar_descripcion || null, bar_color || '#1a1a2e', slug, admin_id);
 
         return { admin_id, bar_id: resBar.lastInsertRowid, slug };
       });
 
       const { admin_id, bar_id, slug } = await registrar();
+
+      // Marcar código como usado
+      await db.prepare(`
+        UPDATE codigos_invitacion
+        SET usado = 1, usado_por = ?, usado_en = datetime('now')
+        WHERE codigo = ? COLLATE NOCASE
+      `).run(admin_id, codigo_invitacion.trim());
 
       const token = jwt.sign(
         { id: admin_id, email, nombre: `${nombre} ${apellido}`, rol: 'admin', bar_id },

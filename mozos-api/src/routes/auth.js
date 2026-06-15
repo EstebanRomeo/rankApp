@@ -186,4 +186,69 @@ router.get('/me', async (req, res) => {
   }
 });
 
+
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /api/auth/codigos/generar  — Solo vos podés usar esto (con ADMIN_SECRET)
+// Body: { admin_secret, cantidad, notas, dias_expiracion }
+// ─────────────────────────────────────────────────────────────────────────────
+router.post('/codigos/generar', async (req, res) => {
+  const { admin_secret, cantidad = 1, notas = '', dias_expiracion } = req.body;
+
+  // Validar que es el dueño del sistema
+  if (!admin_secret || admin_secret !== process.env.ADMIN_SECRET) {
+    return res.status(403).json({ error: 'Sin permiso.' });
+  }
+
+  const crypto = require('crypto');
+  const codigos = [];
+
+  try {
+    for (let i = 0; i < Math.min(cantidad, 50); i++) {
+      // Formato: AUR-XXXX-XXXX (fácil de dictar por teléfono)
+      const parte1 = crypto.randomBytes(2).toString('hex').toUpperCase();
+      const parte2 = crypto.randomBytes(2).toString('hex').toUpperCase();
+      const codigo = `AUR-${parte1}-${parte2}`;
+
+      const expira_en = dias_expiracion
+        ? new Date(Date.now() + dias_expiracion * 86400000).toISOString()
+        : null;
+
+      await db.prepare(`
+        INSERT INTO codigos_invitacion (codigo, notas, expira_en)
+        VALUES (?, ?, ?)
+      `).run(codigo, notas || null, expira_en);
+
+      codigos.push({ codigo, expira_en });
+    }
+
+    return res.json({ ok: true, codigos });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Error generando códigos.' });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GET /api/auth/codigos  — Ver todos los códigos (con ADMIN_SECRET)
+// ─────────────────────────────────────────────────────────────────────────────
+router.get('/codigos', async (req, res) => {
+  const admin_secret = req.query.admin_secret;
+  if (!admin_secret || admin_secret !== process.env.ADMIN_SECRET) {
+    return res.status(403).json({ error: 'Sin permiso.' });
+  }
+  try {
+    const codigos = await db.prepare(`
+      SELECT c.codigo, c.usado, c.notas, c.creado_en, c.expira_en, c.usado_en,
+             u.nombre AS usado_por_nombre, u.email AS usado_por_email
+      FROM codigos_invitacion c
+      LEFT JOIN usuarios u ON u.id = c.usado_por
+      ORDER BY c.creado_en DESC
+    `).all();
+    return res.json({ codigos });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Error.' });
+  }
+});
+
 module.exports = router;
